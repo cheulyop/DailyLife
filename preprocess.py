@@ -5,7 +5,6 @@ import argparse
 import pandas as pd
 
 from tqdm import tqdm
-from pytz import all_timezones_set
 from sklearn.preprocessing import StandardScaler
 
 from utils import chauvenet
@@ -74,7 +73,7 @@ def raw_to_segments(paths, configs, logger):
         # remove outliers using chauvenet's criterion (do we want this?)
         data.mask(chauvenet.criterion(data), inplace=True)
 
-        # remove too stable consecutive values from gsr
+        # remove too stable consecutive values (currently 3s) from gsr
         gsr = data.gsr.dropna()
         data['gsr'].mask(gsr.groupby(gsr.diff().ne(0).cumsum()).transform('size').ge(5*3), inplace=True)
 
@@ -131,7 +130,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # check commandline arguments
-    assert args.timezone in all_timezones_set, f'{args.timezone} is not a valid pytz timezone'
     assert args.size >= 60, f'Segment size must be greater than or equal to 60, but given {args.size}.'
 
     # init default logger

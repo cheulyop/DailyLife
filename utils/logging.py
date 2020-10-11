@@ -1,10 +1,11 @@
-import time
 import pytz
 import logging
 from datetime import datetime
 
 
 def init_logger(tz, name='default'):
+    assert tz in pytz.all_timezones_set, f'{tz} is not a valid pytz timezone'
+
     # create logger
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
