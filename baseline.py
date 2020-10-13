@@ -139,8 +139,8 @@ def pred_xgb(X_train, y_train, X_test, y_test, seed):
         'verbosity': 1,
         'max_depth': 6,
         'eta': 0.3,
-        'objective': 'multi:softprob',
-        'num_class': 2,
+        'objective': 'binary:logistic',
+        # 'num_class': 2,
         'eval_metric': 'auc',
         'seed': seed,
     }
@@ -148,7 +148,7 @@ def pred_xgb(X_train, y_train, X_test, y_test, seed):
     # train model and predict
     num_round = 100
     bst = xgb.train(params, dtrain, num_round)
-    probs = bst.predict(dtest)[:, 1]
+    probs = bst.predict(dtest)
     preds = probs > 0.5
     
     # return results
@@ -163,7 +163,7 @@ def get_baseline_kfold(X, y, seed, target, n_splits, shuffle):
     # aggregated features and labels
     X = np.concatenate(list(X.values()))
     y = np.concatenate(list(y.values()))
-    logging.getLogger('default').info(f'Dataset size:\t {X.shape}')
+    logging.getLogger('default').info(f'Dataset size: {X.shape}')
 
     # get labels corresponding to target class
     if target == 'arousal':
@@ -276,8 +276,8 @@ if __name__ == "__main__":
     assert args.splits > 1, f'--splits must be greater than 1, but given {args.splits}'
 
     logger.info('Preprocessing data with...')
-    logger.info(f"Dataset:\t{PATHS['root']}")
-    logger.info(f"ESM:\t{PATHS['esms']}")
+    logger.info(f"Dataset: {PATHS['root']}")
+    logger.info(f"ESM: {PATHS['esms']}")
     X, y = prepare_dataset(PATHS)
     logger.info('Preprocessing complete.')
 
