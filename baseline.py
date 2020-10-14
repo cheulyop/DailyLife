@@ -128,7 +128,7 @@ def pred_gnb(X_train, y_train, X_test, y_test):
     return get_results(y_test, preds, probs)
 
 
-def pred_xgb(X_train, y_train, X_test, y_test, seed):
+def pred_xgb(X_train, y_train, X_test, y_test, seed, gpu):
     # load data into DMatrix
     dtrain = xgb.DMatrix(X_train, label=y_train)
     dtest = xgb.DMatrix(X_test, label=y_test)
@@ -145,6 +145,11 @@ def pred_xgb(X_train, y_train, X_test, y_test, seed):
         'seed': seed,
     }
 
+    # for gpu support
+    if gpu:
+        params['gpu_id'] = 0
+        params['tree_method'] = 'gpu_hist'
+
     # train model and predict
     num_round = 100
     bst = xgb.train(params, dtrain, num_round)
@@ -155,7 +160,7 @@ def pred_xgb(X_train, y_train, X_test, y_test, seed):
     return get_results(y_test, preds, probs)
 
 
-def get_baseline_kfold(X, y, seed, target, n_splits, shuffle):
+def get_baseline_kfold(X, y, seed, target, n_splits, shuffle, gpu):
     # initialize random number generator and fold generator
     rng = default_rng(seed)
     skf = StratifiedKFold(n_splits=n_splits, shuffle=shuffle, random_state=seed)
@@ -185,7 +190,7 @@ def get_baseline_kfold(X, y, seed, target, n_splits, shuffle):
             'Majority': pred_majority(majority, y_test),
             'Class ratio': pred_random(y_classes, y_test, rng, ratios=class_ratios),
             'Gaussian NB': pred_gnb(X_train, y_train, X_test, y_test),
-            'XGBoost': pred_xgb(X_train, y_train, X_test, y_test, seed),
+            'XGBoost': pred_xgb(X_train, y_train, X_test, y_test, seed, gpu),
         }
 
     # return results as table
@@ -194,7 +199,7 @@ def get_baseline_kfold(X, y, seed, target, n_splits, shuffle):
     return results_table[['Random', 'Majority', 'Class ratio', 'Gaussian NB', 'XGBoost']]
 
 
-def get_baseline_loso(X, y, seed, target, n_splits, shuffle):
+def get_baseline_loso(X, y, seed, target, n_splits, shuffle, gpu):
     # initialize random number generator
     rng = default_rng(seed)
 
@@ -221,7 +226,7 @@ def get_baseline_loso(X, y, seed, target, n_splits, shuffle):
             'Majority': pred_majority(majority, y_test),
             'Class ratio': pred_random(y_classes, y_test, rng, ratios=class_ratios),
             'Gaussian NB': pred_gnb(X_train, y_train, X_test, y_test),
-            'XGBoost': pred_xgb(X_train, y_train, X_test, y_test, seed),
+            'XGBoost': pred_xgb(X_train, y_train, X_test, y_test, seed, gpu),
         }
 
     results = {(uid, classifier): value for (uid, _results) in results.items() for (classifier, value) in _results.items()}
@@ -235,25 +240,27 @@ def get_baseline(X, y, configs):
     cv = configs['cv']
     n_splits = configs['splits']
     shuffle = configs['shuffle']
+    gpu = configs['gpu']
 
     if cv == 'kfold':
-        results = get_baseline_kfold(X, y, seed, target, n_splits, shuffle)
+        results = get_baseline_kfold(X, y, seed, target, n_splits, shuffle, gpu)
     elif cv == 'loso':
-        results = get_baseline_loso(X, y, seed, target, n_splits, shuffle)
+        results = get_baseline_loso(X, y, seed, target, n_splits, shuffle, gpu)
 
     return results
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root', '-r', type=str, required=True)
-    parser.add_argument('--esms', '-e', type=str, required=True)
-    parser.add_argument('--timezone', '-tz', type=str, default='UTC', help='a pytz timezone string for logger, default is UTC')
-    parser.add_argument('--seed', '-s', type=int, default=0, help='seed for random number generation')
-    parser.add_argument('--target', '-t', type=str, default='valence', help='target label for classification, must be either "valence" or "arousal"')
+    parser.add_argument('-r', '--root', type=str, required=True)
+    parser.add_argument('-e', '--esms', type=str, required=True)
+    parser.add_argument('-tz', '--timezone', type=str, default='UTC', help='a pytz timezone string for logger, default is UTC')
+    parser.add_argument('-s', '--seed', type=int, default=0, help='seed for random number generation')
+    parser.add_argument('-t', '--target', type=str, default='valence', help='target label for classification, must be either "valence" or "arousal"')
     parser.add_argument('--cv', type=str, default='kfold', help='type of cross-validation to perform, must be either "kfold" or "loso" (leave-one-subject-out)')
     parser.add_argument('--splits', type=int, default=5, help='number of folds for k-fold stratified classification')
     parser.add_argument('--shuffle', default=False, action='store_true', help='shuffle data before splitting to folds, default is no shuffle')
+    parser.add_argument('--gpu', default=False, action='store_true', help='if True, use available GPU for XGBoost, default is False')
     args = parser.parse_args()
 
     # initialize default logger and path variables
@@ -278,6 +285,7 @@ if __name__ == "__main__":
     logger.info('Preprocessing data with...')
     logger.info(f"Dataset: {PATHS['root']}")
     logger.info(f"ESM: {PATHS['esms']}")
+
     X, y = prepare_dataset(PATHS)
     logger.info('Preprocessing complete.')
 
@@ -287,12 +295,13 @@ if __name__ == "__main__":
         'cv': args.cv,
         'splits': args.splits,
         'shuffle': args.shuffle,
+        'gpu': args.gpu,
     }
 
     logger.info(f'Config: {CONFIGS}')
     results = get_baseline(X, y, CONFIGS)
     # print summary of classification results
     if args.cv == 'kfold':
-        print(results.groupby(level='Metric').mean())
+        print(results.groupby(level='Metric').mean().to_markdown())
     else:
         print(results)
